@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ကြော်ငြာကြည့် Point စု</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 16px;
+         background: var(--tg-theme-bg-color, #fff);
+         color: var(--tg-theme-text-color, #222); }
+  h1 { font-size: 20px; }
+  .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; margin: 12px 0; }
+  .big { font-size: 28px; font-weight: bold; }
+  button { width: 100%; padding: 14px; font-size: 17px; border: 0; border-radius: 10px;
+           background: #2481cc; color: #fff; cursor: pointer; }
+  button:disabled { background: #999; cursor: default; }
+  .muted { color: #777; font-size: 14px; }
+  .history li { margin: 4px 0; }
+  #status { margin-top: 12px; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>🎬 ကြော်ငြာကြည့် Point စု</h1>
+
+<div class="card">
+  <div>လက်ကျန် Points</div>
+  <div class="big" id="points">…</div>
+  <div class="muted" id="kyatValue"></div>
+</div>
+
+<div class="card">
+  <button id="watchBtn">▶️ ကြော်ငြာကြည့်</button>
+  <div class="muted" id="cooldown"></div>
+  <div id="status"></div>
+  <p class="muted">
+    ၅ မိနစ်ခြား တစ်ခါပဲ ကြည့်လို့ရပါတယ်။
+    ကြော်ငြာကို အဆုံးထိ ကြည့်မှ point ရပါမယ်။
+  </p>
+</div>
+
+<div class="card">
+  <h3>မှတ်တမ်း</h3>
+  <ul class="history" id="history"></ul>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
