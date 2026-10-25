@@ -79,3 +79,4 @@ point ပေးပါတယ်။ **အသုံးပြုသူအစစ်�
 
 `/admin` `/pending` `/add_revenue <kyat>` `/set_points_per_ad <n>`
 `/set_kyat_rate <kyat>` `/set_share <pct>` `/set_min_withdraw <points>`
+`/set_cooldown <seconds>`

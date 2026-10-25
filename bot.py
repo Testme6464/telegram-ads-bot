@@ -290,6 +290,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/set_kyat_rate <kyat> — ၁ point = ဘယ်နှစ်ကျပ်",
         "/set_share <pct> — ဆုကြေးရန်ပုံငွေ %",
         "/set_min_withdraw <points> — အနည်းဆုံး ထုတ်ယူမှု",
+        "/set_cooldown <seconds> — ကြော်ငြာနှစ်ခါကြား အချိန်ခြား (စက္ကန့်)",
     ]
     if pending:
         lines.append("")
@@ -349,6 +350,10 @@ async def set_min_withdraw(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _admin_set(update, context, "min_withdraw_points", "set_min_withdraw")
 
 
+async def set_cooldown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _admin_set(update, context, "cooldown_seconds", "set_cooldown")
+
+
 async def add_revenue_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -394,6 +399,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("set_kyat_rate", set_kyat_rate))
     app.add_handler(CommandHandler("set_share", set_share))
     app.add_handler(CommandHandler("set_min_withdraw", set_min_withdraw))
+    app.add_handler(CommandHandler("set_cooldown", set_cooldown))
     conv = ConversationHandler(
         entry_points=[
             CommandHandler("withdraw", withdraw_start),
