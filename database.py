@@ -1,4 +1,17 @@
-"""SQLite storage for the first version.
+"""Storage for the bot. Two modes, chosen by environment:
+
+  - DATABASE_URL set  -> Postgres (production). Required on Render: free
+    instances have an ephemeral filesystem, so a SQLite file is wiped on
+    every redeploy/restart/spin-down and all points vanish with it. A hosted
+    Postgres (e.g. Supabase free tier) survives restarts, so points do too.
+  - DATABASE_URL unset -> SQLite file (local development only).
+
+The same call sites serve both modes through a thin connection wrapper.
+Postgres differences handled here, in one place:
+  - placeholders: sqlite3 uses ?, psycopg uses %s (translated in _Conn)
+  - AUTOINCREMENT -> SERIAL, telegram_id/user_id -> BIGINT
+  - INSERT OR IGNORE -> INSERT ... ON CONFLICT DO NOTHING (2 call sites)
+  - cursor.lastrowid -> INSERT ... RETURNING id (create_withdrawal)
 
 Tables:
   users        — one row per Telegram account (telegram_id is the identity)
@@ -7,16 +20,19 @@ Tables:
   withdrawals  — KBZPay payout requests and their manual-payout status
   revenue      — ad revenue entered by the admin (manual, or Monetag import)
   settings     — admin-adjustable economy values
-
-Switching to Postgres later: replace sqlite3 with psycopg and DATABASE_URL,
-keep the same SQL (it is deliberately plain: no SQLite-only features except
-AUTOINCREMENT, which Postgres spells as SERIAL — change that one keyword).
 """
-import sqlite3
 import time
 import uuid
 
 import config
+
+USE_POSTGRES = bool(config.DATABASE_URL)
+
+if USE_POSTGRES:
+    import psycopg
+    from psycopg.rows import dict_row
+else:
+    import sqlite3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -78,19 +94,73 @@ DEFAULT_SETTINGS = {
 }
 
 
+def _postgres_schema() -> str:
+    s = SCHEMA
+    s = s.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
+    s = s.replace("telegram_id INTEGER PRIMARY KEY", "telegram_id BIGINT PRIMARY KEY")
+    s = s.replace("user_id INTEGER NOT NULL", "user_id BIGINT NOT NULL")
+    return s
+
+
+class _Conn:
+    """sqlite3/psycopg connection wrapper with one shared interface.
+
+    execute() translates ? placeholders to %s for Postgres. Returned
+    cursors support fetchone()/fetchall() and dict-style row access in
+    both modes (sqlite3.Row / psycopg dict_row).
+    """
+
+    def __init__(self, raw):
+        self._raw = raw
+
+    def execute(self, sql, params=None):
+        if USE_POSTGRES:
+            sql = sql.replace("?", "%s")
+        if params is None:
+            return self._raw.execute(sql)
+        return self._raw.execute(sql, params)
+
+    def executescript(self, sql):
+        # SQLite-only path (init_db branches for Postgres).
+        self._raw.executescript(sql)
+
+    def commit(self):
+        self._raw.commit()
+
+    def close(self):
+        self._raw.close()
+
+
 def connect():
-    conn = sqlite3.connect(config.DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if USE_POSTGRES:
+        url = config.DATABASE_URL
+        if "sslmode" not in url:
+            url += ("&" if "?" in url else "?") + "sslmode=require"
+        raw = psycopg.connect(url, row_factory=dict_row)
+    else:
+        raw = sqlite3.connect(config.DATABASE_PATH)
+        raw.row_factory = sqlite3.Row
+    return _Conn(raw)
 
 
 def init_db():
     conn = connect()
-    conn.executescript(SCHEMA)
+    if USE_POSTGRES:
+        conn.execute(_postgres_schema())
+    else:
+        conn.executescript(SCHEMA)
     for key, value in DEFAULT_SETTINGS.items():
-        conn.execute(
-            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)", (key, value)
-        )
+        if USE_POSTGRES:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO NOTHING",
+                (key, value),
+            )
+        else:
+            conn.execute(
+                "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+                (key, value),
+            )
     conn.commit()
     conn.close()
 
@@ -119,11 +189,18 @@ def _now() -> int:
 
 def get_or_create_user(telegram_id: int, username: str = "", first_name: str = ""):
     conn = connect()
-    conn.execute(
-        "INSERT OR IGNORE INTO users (telegram_id, username, first_name, created_at)"
-        " VALUES (?, ?, ?, ?)",
-        (telegram_id, username, first_name, _now()),
-    )
+    if USE_POSTGRES:
+        conn.execute(
+            "INSERT INTO users (telegram_id, username, first_name, created_at)"
+            " VALUES (?, ?, ?, ?) ON CONFLICT (telegram_id) DO NOTHING",
+            (telegram_id, username, first_name, _now()),
+        )
+    else:
+        conn.execute(
+            "INSERT OR IGNORE INTO users (telegram_id, username, first_name, created_at)"
+            " VALUES (?, ?, ?, ?)",
+            (telegram_id, username, first_name, _now()),
+        )
     conn.execute(
         "UPDATE users SET username = ?, first_name = ? WHERE telegram_id = ?",
         (username, first_name, telegram_id),
@@ -251,12 +328,20 @@ def create_withdrawal(user_id: int, kpay_number: str, kpay_name: str, points: in
         " VALUES (?, ?, 'withdrawal_hold', ?)",
         (user_id, -points, _now()),
     )
-    cur = conn.execute(
-        "INSERT INTO withdrawals (user_id, kpay_number, kpay_name, points, kyat,"
-        " status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)",
-        (user_id, kpay_number, kpay_name, points, kyat, _now()),
-    )
-    wid = cur.lastrowid
+    if USE_POSTGRES:
+        cur = conn.execute(
+            "INSERT INTO withdrawals (user_id, kpay_number, kpay_name, points, kyat,"
+            " status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?) RETURNING id",
+            (user_id, kpay_number, kpay_name, points, kyat, _now()),
+        )
+        wid = cur.fetchone()["id"]
+    else:
+        cur = conn.execute(
+            "INSERT INTO withdrawals (user_id, kpay_number, kpay_name, points, kyat,"
+            " status, created_at) VALUES (?, ?, ?, ?, ?, 'pending', ?)",
+            (user_id, kpay_number, kpay_name, points, kyat, _now()),
+        )
+        wid = cur.lastrowid
     conn.commit()
     conn.close()
     return wid, kyat
@@ -273,14 +358,18 @@ def list_pending_withdrawals():
 
 def get_withdrawal(wid: int):
     conn = connect()
-    row = conn.execute("SELECT * FROM withdrawals WHERE id = ?", (wid,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM withdrawals WHERE id = ?", (wid,)
+    ).fetchone()
     conn.close()
     return dict(row) if row else None
 
 
 def set_withdrawal_status(wid: int, status: str, refund: bool = False):
     conn = connect()
-    row = conn.execute("SELECT * FROM withdrawals WHERE id = ?", (wid,)).fetchone()
+    row = conn.execute(
+        "SELECT * FROM withdrawals WHERE id = ?", (wid,)
+    ).fetchone()
     if not row:
         conn.close()
         return None

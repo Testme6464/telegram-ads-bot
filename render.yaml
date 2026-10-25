@@ -9,6 +9,8 @@ services:
         sync: false
       - key: ADMIN_TELEGRAM_ID
         sync: false
+      - key: DATABASE_URL
+        sync: false
       - key: MONETAG_ZONE_ID
         sync: false
       - key: MONETAG_POSTBACK_SECRET

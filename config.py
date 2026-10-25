@@ -22,6 +22,11 @@ def _float(name: str, default: float) -> float:
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_TELEGRAM_ID = _int("ADMIN_TELEGRAM_ID", 0)
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "bot.db")
+# Postgres connection string (production). When set, database.py uses
+# Postgres instead of the local SQLite file — required on Render, where
+# the filesystem is wiped on every restart and SQLite points vanish.
+# Example: postgresql://postgres:<password>@db.<ref>.supabase.co:5432/postgres
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 # Mini App / ads
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")  # e.g. https://your-app.onrender.com/app/

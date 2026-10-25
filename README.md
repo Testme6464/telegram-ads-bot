@@ -66,9 +66,12 @@ point ပေးပါတယ်။ **အသုံးပြုသူအစစ်�
 - **အခမဲ့ host က အိပ်ပါတယ်** — Render/Railway free tier က သုံးမရှိရင်
   အိပ်သွားပြီး ပြန်နိုးဖို့ စက္ကန့်အနည်းငယ် ကြာပါတယ်။ ၂၄ နာရီ မအိပ်ချင်ရင်
   paid instance (သို့မဟုတ် VPS) လိုပါတယ်။
-- **Database က SQLite ပါ** — ပထမဗားရှင်းအတွက် လုံလောက်ပါတယ်။
-  User များလာရင် Postgres သို့ ပြောင်းပါ (`database.py` ထဲက SQL က
-  plain SQL မို့ `AUTOINCREMENT` ကို `SERIAL` လို့ ပြောင်းရုံနဲ့ ရပါတယ်)။
+- **Database က Postgres ဖြစ်ရမယ် (production မှာ)** — Render free
+  instance ရဲ့ filesystem က restart/redeploy တိုင်း ပျက်သွားလို့ SQLite
+  ဖိုင်ထဲက point တွေ အကုန် ပျောက်ပါတယ် (၂၀၂၆-၁၀-၂၅ မှာ တကယ်
+  ကြုံခဲ့ရပါတယ်)။ ဒါကြောင့် production မှာ `DATABASE_URL` (ဥပမာ
+  Supabase free tier) ပေးရပြီး code က အဲ့ဒါရှိရင် Postgres သုံးပါတယ်။
+  Local မှာပဲ စမ်းရင် `DATABASE_URL` မပေးဘဲ SQLite သုံးလို့ရပါတယ်။
 - **Bot အစစ်က မလည်သေးပါ** — ဒီ code ကို host မှာ deploy လုပ်ပြီး
   အပေါ်က variable တွေ ဖြည့်ပြီးမှ bot အလုပ်လုပ်ပါမယ်။
 
