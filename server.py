@@ -93,6 +93,22 @@ def api_history(initData: str = ""):
     return {"history": db.get_history(user_id)}
 
 
+@app.get("/api/referral")
+def api_referral(initData: str = ""):
+    user_id = verify_init_data(initData)
+    stats = db.get_referral_stats(user_id)
+    try:
+        pct = float(db.get_setting("referral_pct"))
+    except (TypeError, ValueError):
+        pct = 10.0
+    return {
+        "referral_link": f"https://t.me/{config.BOT_USERNAME}?start=ref{user_id}",
+        "referred_count": stats["referred_count"],
+        "bonus_total": stats["bonus_total"],
+        "referral_pct": pct,
+    }
+
+
 @app.post("/api/ad/start")
 async def api_ad_start(request: Request):
     body = await request.json()

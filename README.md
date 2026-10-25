@@ -6,7 +6,7 @@
 ## အလုပ်လုပ်ပုံ
 
 1. User က bot မှာ `/start` နှိပ်ပြီး Mini App ဖွင့်တယ်။
-2. Mini App မှာ “ကြော်ငြာကြည့်” ကို နှိပ်တယ် (၅ မိနစ်ခြား တစ်ခါ)။
+2. Mini App မှာ “ကြော်ငြာကြည့်” ကို နှိပ်တယ် (cooldown အချိန်ခြားနဲ့ တစ်ခါ)။
 3. Monetag ကြော်ငြာ အဆုံးထိ ကြည့်ပြီးမှ point တက်တယ်။
 4. Point ပြည့်ရင် bot ထဲမှာ ထုတ်ယူတောင်းဆိုတယ် (KBZPay နံပါတ် + နာမည် + point)။
 5. Admin က အတည်ပြုတယ် → KBZPay app နဲ့ လူကိုယ်တိုင် လွှဲတယ် →
@@ -75,8 +75,19 @@ point ပေးပါတယ်။ **အသုံးပြုသူအစစ်�
 - **Bot အစစ်က မလည်သေးပါ** — ဒီ code ကို host မှာ deploy လုပ်ပြီး
   အပေါ်က variable တွေ ဖြည့်ပြီးမှ bot အလုပ်လုပ်ပါမယ်။
 
+## Referral (မိတ်ဆက်ဆု)
+
+- ကိုယ့် link: `https://t.me/adsrewardmmbot?start=ref<Telegram ID>` —
+  bot ထဲမှာ `/referral` နဲ့ Mini App ထဲမှာပါ ကြည့်လို့ရတယ်။
+- ဒီ link နဲ့ ဝင်လာသူ ကြော်ငြာကြည့်တိုင်း သူရတဲ့ point ရဲ့ 10%
+  (default, `/set_referral_pct` နဲ့ ပြင်လို့ရ) ကို refer လုပ်သူက
+  အပိုရတယ် — ဝင်လာသူရတာ မလျော့ဘူး၊ တစ်သက်လုံး။
+- ပထမဆုံး registration ကပဲ referrer ကို သတ်မှတ်တယ် — နောက်မှ
+  link အသစ်နဲ့ ဝင်လည်း ပြောင်းလို့မရဘူး၊ ကိုယ့်ကိုယ်ကို refer လို့မရဘူး။
+- Bonus တွေက ပုံမှန် point တွေလိုပဲ ထုတ်ယူလို့ရတယ်။
+
 ## Admin Commands (bot ထဲမှာ)
 
 `/admin` `/pending` `/add_revenue <kyat>` `/set_points_per_ad <n>`
 `/set_kyat_rate <kyat>` `/set_share <pct>` `/set_min_withdraw <points>`
-`/set_cooldown <seconds>`
+`/set_cooldown <seconds>` `/set_referral_pct <pct>`

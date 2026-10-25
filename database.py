@@ -41,7 +41,8 @@ CREATE TABLE IF NOT EXISTS users (
     first_name TEXT,
     points INTEGER NOT NULL DEFAULT 0,
     last_ad_at INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    referrer_id INTEGER
 );
 CREATE TABLE IF NOT EXISTS points_ledger (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,6 +92,7 @@ DEFAULT_SETTINGS = {
     "min_withdraw_points": str(config.MIN_WITHDRAW_POINTS),
     "revenue_share_pct": str(config.REVENUE_SHARE_PCT),
     "cooldown_seconds": str(config.COOLDOWN_SECONDS),
+    "referral_pct": str(config.REFERRAL_PCT),
 }
 
 
@@ -99,6 +101,7 @@ def _postgres_schema() -> str:
     s = s.replace("INTEGER PRIMARY KEY AUTOINCREMENT", "SERIAL PRIMARY KEY")
     s = s.replace("telegram_id INTEGER PRIMARY KEY", "telegram_id BIGINT PRIMARY KEY")
     s = s.replace("user_id INTEGER NOT NULL", "user_id BIGINT NOT NULL")
+    s = s.replace("referrer_id INTEGER", "referrer_id BIGINT")
     return s
 
 
@@ -147,8 +150,13 @@ def init_db():
     conn = connect()
     if USE_POSTGRES:
         conn.execute(_postgres_schema())
+        # Migration for databases created before referrals existed.
+        conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS referrer_id BIGINT")
     else:
         conn.executescript(SCHEMA)
+        cols = conn.execute("PRAGMA table_info(users)").fetchall()
+        if "referrer_id" not in [c["name"] for c in cols]:
+            conn.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER")
     for key, value in DEFAULT_SETTINGS.items():
         if USE_POSTGRES:
             conn.execute(
@@ -220,6 +228,52 @@ def get_user(telegram_id: int):
     ).fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def set_referrer(user_id: int, referrer_id: int) -> bool:
+    """Attach a referrer once. Returns True if attached.
+
+    Ignored when: self-referral, the user already has a referrer,
+    or the referrer is not a registered user. First registration wins;
+    a later referral link never overwrites the stored referrer.
+    """
+    if user_id == referrer_id:
+        return False
+    conn = connect()
+    row = conn.execute(
+        "SELECT referrer_id FROM users WHERE telegram_id = ?", (user_id,)
+    ).fetchone()
+    if not row or row["referrer_id"] is not None:
+        conn.close()
+        return False
+    ref = conn.execute(
+        "SELECT 1 AS one FROM users WHERE telegram_id = ?", (referrer_id,)
+    ).fetchone()
+    if not ref:
+        conn.close()
+        return False
+    conn.execute(
+        "UPDATE users SET referrer_id = ? WHERE telegram_id = ?",
+        (referrer_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def get_referral_stats(user_id: int):
+    """How many users this user referred, and total bonus earned."""
+    conn = connect()
+    count = conn.execute(
+        "SELECT COUNT(*) c FROM users WHERE referrer_id = ?", (user_id,)
+    ).fetchone()["c"]
+    bonus = conn.execute(
+        "SELECT COALESCE(SUM(delta),0) s FROM points_ledger"
+        " WHERE user_id = ? AND reason = 'referral_bonus'",
+        (user_id,),
+    ).fetchone()["s"]
+    conn.close()
+    return {"referred_count": count, "bonus_total": bonus}
 
 
 def add_points(user_id: int, delta: int, reason: str, ref: str = ""):
@@ -297,6 +351,32 @@ def complete_ad_session(user_id: int, ad_token: str):
         " VALUES (?, ?, 'ad_view', ?, ?)",
         (user_id, points, ad_token, _now()),
     )
+    # Referral bonus (lifetime, minted on top — the referee keeps every
+    # point). The referrer gets referral_pct % of each completed ad view.
+    ref_row = conn.execute(
+        "SELECT referrer_id FROM users WHERE telegram_id = ?", (user_id,)
+    ).fetchone()
+    referrer_id = ref_row["referrer_id"] if ref_row else None
+    if referrer_id and referrer_id != user_id:
+        exists = conn.execute(
+            "SELECT 1 AS one FROM users WHERE telegram_id = ?", (referrer_id,)
+        ).fetchone()
+        if exists:
+            try:
+                pct = float(get_setting("referral_pct"))
+            except (TypeError, ValueError):
+                pct = 10.0
+            bonus = int(points * pct // 100)
+            if bonus > 0:
+                conn.execute(
+                    "UPDATE users SET points = points + ? WHERE telegram_id = ?",
+                    (bonus, referrer_id),
+                )
+                conn.execute(
+                    "INSERT INTO points_ledger (user_id, delta, reason, ref, created_at)"
+                    " VALUES (?, ?, 'referral_bonus', ?, ?)",
+                    (referrer_id, bonus, ad_token, _now()),
+                )
     conn.commit()
     conn.close()
     return True, "ok", points

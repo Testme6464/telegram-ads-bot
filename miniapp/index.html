@@ -20,6 +20,7 @@
   .muted { color: #777; font-size: 14px; }
   .history li { margin: 4px 0; }
   #status { margin-top: 12px; font-weight: bold; }
+  #refLink { word-break: break-all; }
 </style>
 </head>
 <body>
@@ -35,10 +36,16 @@
   <button id="watchBtn">▶️ ကြော်ငြာကြည့်</button>
   <div class="muted" id="cooldown"></div>
   <div id="status"></div>
-  <p class="muted">
-    ၅ မိနစ်ခြား တစ်ခါပဲ ကြည့်လို့ရပါတယ်။
-    ကြော်ငြာကို အဆုံးထိ ကြည့်မှ point ရပါမယ်။
-  </p>
+  <p class="muted" id="cooldownNote"></p>
+</div>
+
+<div class="card">
+  <h3>👥 Referral (မိတ်ဆက်ဆု)</h3>
+  <div class="muted" id="refLink">…</div>
+  <p><button id="copyRefBtn">🔗 Link ကူးယူမယ်</button></p>
+  <div class="muted" id="refStats"></div>
+  <div class="muted" id="refCopyStatus"></div>
+  <p class="muted" id="refNote"></p>
 </div>
 
 <div class="card">

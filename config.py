@@ -21,6 +21,8 @@ def _float(name: str, default: float) -> float:
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_TELEGRAM_ID = _int("ADMIN_TELEGRAM_ID", 0)
+# Public username of the bot, used to build referral links.
+BOT_USERNAME = os.environ.get("BOT_USERNAME", "adsrewardmmbot")
 DATABASE_PATH = os.environ.get("DATABASE_PATH", "bot.db")
 # Postgres connection string (production). When set, database.py uses
 # Postgres instead of the local SQLite file — required on Render, where
@@ -43,6 +45,7 @@ POINTS_PER_AD = _int("POINTS_PER_AD", 10)               # points per watched ad
 KYAT_PER_POINT = _float("KYAT_PER_POINT", 1.0)          # kyat value of 1 point
 MIN_WITHDRAW_POINTS = _int("MIN_WITHDRAW_POINTS", 1000) # minimum withdrawal
 REVENUE_SHARE_PCT = _float("REVENUE_SHARE_PCT", 70.0)   # % of ad revenue for rewards
+REFERRAL_PCT = _float("REFERRAL_PCT", 10.0)             # % of a referee's ad points paid to the referrer, lifetime, minted on top
 
 PORT = _int("PORT", 8000)
 HOST = os.environ.get("HOST", "0.0.0.0")

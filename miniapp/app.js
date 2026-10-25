@@ -1,7 +1,7 @@
 /* Mini App logic.
  *
  * Ad flow (credit is decided by the SERVER, never here):
- *   1. POST /api/ad/start  -> server checks the 5-minute cooldown and
+ *   1. POST /api/ad/start  -> server checks the cooldown and
  *      returns a one-time ad_token (or 429 if cooling down).
  *   2. Show the Monetag rewarded ad for that session.
  *   3. Only when the ad SDK reports completion, POST /api/ad/complete
@@ -72,6 +72,10 @@
     }
     $("points").textContent = me.data.points;
     $("kyatValue").textContent = "≈ " + me.data.kyat_value + " ကျပ်";
+    const cd = me.data.cooldown_seconds;
+    $("cooldownNote").textContent =
+      (cd >= 60 ? Math.floor(cd / 60) + " မိနစ်" : cd + " စက္ကန့်") +
+      "ခြား တစ်ခါပဲ ကြည့်လို့ရပါတယ်။ ကြော်ငြာကို အဆုံးထိ ကြည့်မှ point ရပါမယ်။";
     if (me.data.cooldown_remaining > 0) startCooldown(me.data.cooldown_remaining);
     else { $("watchBtn").disabled = false; $("cooldown").textContent = "ကြည့်လို့ရပါပြီ ✅"; }
     const h = await apiGet("/api/history");
@@ -82,10 +86,20 @@
         return "<li>" + sign + row.delta + " — " + row.reason + " (" + d + ")</li>";
       }).join("") || "<li>မှတ်တမ်း မရှိသေးပါ</li>";
     }
+    const r = await apiGet("/api/referral");
+    if (r.ok) {
+      window._refLink = r.data.referral_link;
+      $("refLink").textContent = r.data.referral_link;
+      $("refStats").textContent =
+        "ဝင်လာသူ: " + r.data.referred_count + " ယောက် • ရပြီးတဲ့ bonus: " +
+        r.data.bonus_total + " points";
+      $("refNote").textContent =
+        "ဒီ link နဲ့ ဝင်လာသူ ကြော်ငြာကြည့်တိုင်း သူရတဲ့ point ရဲ့ " +
+        r.data.referral_pct + "% ကို သင်က အပိုရမယ် (သူတို့ရတာ မလျော့ဘူး) — တစ်သက်လုံး။";
+    }
   }
 
-  // Real Monetag SDK call. The script tag in index.html exposes a global
-  // show_<zoneId>() function. It resolves when the rewarded interstitial
+  // Real Monetag SDK call. The script tag in index.html exposes a global  // show_<zoneId>() function. It resolves when the rewarded interstitial
   // finishes (with Monetag's reward postback enabled, only after Monetag
   // confirms the show); it rejects on close/skip/error — a skipped ad
   // must never reach /api/ad/complete.
@@ -118,14 +132,24 @@
     });
   }
 
-  $("watchBtn").addEventListener("click", async () => {
-    $("status").textContent = "";
+  $("copyRefBtn").addEventListener("click", async () => {
+    const link = window._refLink || "";
+    if (!link) return;
+    try {
+      await navigator.clipboard.writeText(link);
+      $("refCopyStatus").textContent = "ကူးပြီးပြီ ✅";
+    } catch (e) {
+      $("refCopyStatus").textContent = link;
+    }
+  });
+
+  $("watchBtn").addEventListener("click", async () => {    $("status").textContent = "";
     $("watchBtn").disabled = true;
     const start = await api("/api/ad/start");
     if (!start.ok) {
       if (start.status === 429) {
         startCooldown(start.data.cooldown_remaining || 300);
-        $("status").textContent = "၅ မိနစ် မပြည့်သေးပါ။ ခဏစောင့်ပါ။";
+        $("status").textContent = "Cooldown မပြည့်သေးပါ။ ခဏစောင့်ပါ။";
       } else {
         $("status").textContent = "Error: " + (start.data.error || "ad start failed");
         $("watchBtn").disabled = false;

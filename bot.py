@@ -58,17 +58,61 @@ def balance_text(user_id: int) -> str:
     )
 
 
+def cooldown_text() -> str:
+    """Current ad cooldown as a short Burmese phrase, e.g. '၃ မိနစ်'."""
+    try:
+        secs = int(float(db.get_setting("cooldown_seconds")))
+    except (TypeError, ValueError):
+        secs = 300
+    if secs >= 60 and secs % 60 == 0:
+        return f"{secs // 60} မိနစ်"
+    return f"{secs} စက္ကန့်"
+
+
+def referral_link(user_id: int) -> str:
+    return f"https://t.me/{config.BOT_USERNAME}?start=ref{user_id}"
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     db.get_or_create_user(user.id, user.username or "", user.first_name or "")
+    # Referral payload: /start ref<telegram_id> from a shared link.
+    # First registration wins; an existing referrer is never overwritten,
+    # and self-referral is ignored (enforced in db.set_referrer).
+    if context.args and context.args[0].startswith("ref"):
+        try:
+            referrer_id = int(context.args[0][3:])
+        except ValueError:
+            referrer_id = 0
+        if referrer_id:
+            db.set_referrer(user.id, referrer_id)
     await update.message.reply_text(
         "မင်္ဂလာပါ! 🎬\n\n"
         "ကြော်ငြာကြည့်ပြီး point စုတဲ့ bot ပါ။\n"
-        "• ၅ မိနစ်ခြား တစ်ခါ ကြော်ငြာကြည့်လို့ရတယ်\n"
+        f"• {cooldown_text()}ခြား တစ်ခါ ကြော်ငြာကြည့်လို့ရတယ်\n"
         "• ကြော်ငြာတစ်ခါကြည့်တိုင်း point ရတယ်\n"
-        "• Point တွေကို KBZPay နဲ့ ဆုကြေးအဖြစ် ထုတ်ယူလို့ရတယ်\n\n"
+        "• Point တွေကို KBZPay နဲ့ ဆုကြေးအဖြစ် ထုတ်ယူလို့ရတယ်\n"
+        "• သူငယ်ချင်းကို refer လုပ်ရင် သူကြည့်တိုင်း 10% အပိုရတယ် (/referral)\n\n"
         "Mini App ကို ဖွင့်ပြီး ကြော်ငြာကြည့်ပါ 👇",
         reply_markup=main_menu(),
+    )
+
+
+async def referral_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    db.get_or_create_user(user.id, user.username or "", user.first_name or "")
+    stats = db.get_referral_stats(user.id)
+    try:
+        pct = float(db.get_setting("referral_pct"))
+    except (TypeError, ValueError):
+        pct = 10.0
+    await update.message.reply_text(
+        "👥 Referral\n\n"
+        f"သင့် link:\n{referral_link(user.id)}\n\n"
+        f"ဒီ link နဲ့ ဝင်လာသူ: {stats['referred_count']} ယောက်\n"
+        f"ရပြီးတဲ့ bonus: {stats['bonus_total']} points\n\n"
+        f"သူတို့ ကြော်ငြာကြည့်တိုင်း သူတို့ရတဲ့ point ရဲ့ {pct:g}% ကို "
+        "သင်က အပိုရမယ် (သူတို့ရတာ မလျော့ဘူး) — တစ်သက်လုံး။"
     )
 
 
@@ -76,13 +120,15 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (
         "❓ အကူအညီ\n\n"
         "• ကြော်ငြာကြည့်ရန်: Mini App ဖွင့် → “ကြော်ငြာကြည့်” ကို နှိပ်ပါ\n"
-        "• ၅ မိနစ်ခြား တစ်ခါပဲ ကြည့်လို့ရပါတယ်\n"
+        f"• {cooldown_text()}ခြား တစ်ခါပဲ ကြည့်လို့ရပါတယ်\n"
         "• Point ရဖို့ ကြော်ငြာကို အဆုံးထိ ကြည့်ရပါမယ်\n"
         "• ထုတ်ယူရန်: “ထုတ်ယူမယ်” ကို နှိပ်ပြီး KBZPay အကောင့်နံပါတ်၊\n"
         "  နာမည်နဲ့ point ပမာဏ ထည့်ပါ\n"
         "• ထုတ်ယူမှုကို admin က အတည်ပြုပြီးမှ KBZPay နဲ့ လူကိုယ်တိုင်\n"
-        "  လွှဲပေးပါမယ်\n\n"
-        "Commands: /start /balance /withdraw /help"
+        "  လွှဲပေးပါမယ်\n"
+        "• Referral: /referral မှာ သင့် link ကို ယူပြီး သူငယ်ချင်းကို ပေးပါ —\n"
+        "  သူကြည့်တိုင်း 10% အပိုရမယ်\n\n"
+        "Commands: /start /balance /withdraw /referral /help"
     )
     if update.callback_query:
         await update.callback_query.answer()
@@ -102,12 +148,13 @@ async def on_button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(
             "❓ အကူအညီ\n\n"
             "• ကြော်ငြာကြည့်ရန်: Mini App ဖွင့် → “ကြော်ငြာကြည့်” ကို နှိပ်ပါ\n"
-            "• ၅ မိနစ်ခြား တစ်ခါပဲ ကြည့်လို့ရပါတယ်\n"
+            f"• {cooldown_text()}ခြား တစ်ခါပဲ ကြည့်လို့ရပါတယ်\n"
             "• Point ရဖို့ ကြော်ငြာကို အဆုံးထိ ကြည့်ရပါမယ်\n"
             "• ထုတ်ယူရန်: “ထုတ်ယူမယ်” ကို နှိပ်ပြီး KBZPay အကောင့်နံပါတ်၊\n"
             "  နာမည်နဲ့ point ပမာဏ ထည့်ပါ\n"
             "• ထုတ်ယူမှုကို admin က အတည်ပြုပြီးမှ KBZPay နဲ့ လူကိုယ်တိုင်\n"
-            "  လွှဲပေးပါမယ်"
+            "  လွှဲပေးပါမယ်\n"
+            "• Referral: /referral မှာ သင့် link ကို ယူပြီး သူငယ်ချင်းကို ပေးပါ"
         )
     elif data == "withdraw":
         await query.message.reply_text(
@@ -291,6 +338,7 @@ async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/set_share <pct> — ဆုကြေးရန်ပုံငွေ %",
         "/set_min_withdraw <points> — အနည်းဆုံး ထုတ်ယူမှု",
         "/set_cooldown <seconds> — ကြော်ငြာနှစ်ခါကြား အချိန်ခြား (စက္ကန့်)",
+        "/set_referral_pct <pct> — refer bonus %",
     ]
     if pending:
         lines.append("")
@@ -354,6 +402,10 @@ async def set_cooldown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await _admin_set(update, context, "cooldown_seconds", "set_cooldown")
 
 
+async def set_referral_pct(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await _admin_set(update, context, "referral_pct", "set_referral_pct")
+
+
 async def add_revenue_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.effective_user.id):
         return
@@ -388,6 +440,7 @@ def build_application() -> Application:
     app = Application.builder().token(config.BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
+    app.add_handler(CommandHandler("referral", referral_cmd))
     app.add_handler(CommandHandler("balance",
                                    lambda u, c: u.message.reply_text(
                                        balance_text(u.effective_user.id),
@@ -400,6 +453,7 @@ def build_application() -> Application:
     app.add_handler(CommandHandler("set_share", set_share))
     app.add_handler(CommandHandler("set_min_withdraw", set_min_withdraw))
     app.add_handler(CommandHandler("set_cooldown", set_cooldown))
+    app.add_handler(CommandHandler("set_referral_pct", set_referral_pct))
     conv = ConversationHandler(
         entry_points=[
             CommandHandler("withdraw", withdraw_start),
