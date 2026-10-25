@@ -8,13 +8,12 @@
  *      with the token. The server verifies the token + cooldown again
  *      and only then credits points.
  *
- * MONETAG WIRING (do this once you have a Monetag account):
- *   - Paste Monetag's current Telegram Mini App SDK <script> tag into
- *     index.html (their dashboard gives you the exact snippet).
- *   - Replace the placeholder showMonetagAd() below with the SDK's
- *     rewarded-ad call, using the zone id from /api/config.
- *   - The SDK's on-complete callback is where step 3 must fire — and
- *     nowhere else. Never credit points from a button click alone.
+ * MONETAG WIRING (live since 2026-10-25):
+ *   - Monetag Telegram Mini App SDK <script> tag is in index.html
+ *     (zone 12117255, Rewarded Interstitial).
+ *   - showMonetagAd() below calls the SDK's global show_<zoneId>()
+ *     function. Its on-complete resolution is where step 3 fires —
+ *     and nowhere else. Never credit points from a button click alone.
  *
  * DEMO MODE: if the server says demo_mode is on, step 2 is simulated
  * with a short countdown so you can test the flow with no Monetag
@@ -85,16 +84,29 @@
     }
   }
 
-  // TODO: replace with the real Monetag SDK call (see header comment).
-  // Must resolve only when the ad actually completed, and reject on
-  // close/skip/error — a skipped ad must never reach /api/ad/complete.
+  // Real Monetag SDK call. The script tag in index.html exposes a global
+  // show_<zoneId>() function. It resolves when the rewarded interstitial
+  // finishes (with Monetag's reward postback enabled, only after Monetag
+  // confirms the show); it rejects on close/skip/error — a skipped ad
+  // must never reach /api/ad/complete.
   function showMonetagAd(zoneId) {
+    const fnName = "show_" + zoneId;
     return new Promise((resolve, reject) => {
-      if (window.MonetagMiniApp && typeof window.MonetagMiniApp.showRewarded === "function") {
-        window.MonetagMiniApp.showRewarded(zoneId).then(resolve).catch(reject);
-      } else {
-        reject(new Error("Monetag SDK ကို index.html ထဲမှာ မထည့်ရသေးပါ။"));
-      }
+      const started = Date.now();
+      (function waitForSdk() {
+        const fn = window[fnName];
+        if (typeof fn === "function") {
+          try {
+            const r = fn();
+            if (r && typeof r.then === "function") r.then(resolve).catch(reject);
+            else resolve();
+          } catch (e) { reject(e); }
+        } else if (Date.now() - started < 5000) {
+          setTimeout(waitForSdk, 200);
+        } else {
+          reject(new Error("Monetag SDK ကို load မဖြစ်သေးပါ။ ခဏနေမှ ပြန်နှိပ်ပါ။"));
+        }
+      })();
     });
   }
 
